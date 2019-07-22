@@ -1,0 +1,100 @@
+
+---
+title: Kyaukmasin Resreve_Biomass collected to modify MyanmarSelection System for
+  forest management
+output:
+  html_document:
+    df_print: paged
+---
+
+In myanmar, 1.4 % of the total forest is being lost annually.Myanmar Selection System known as Burma Selection System developed by British in 1880s is still being applied for the sustainable forest management in Myanmar. Forest Department of Myanmar is planning to modify the system in order to accomodate with present forest situation. FD, therefore, conducted a forest inventory at the compartment number 20 of the Kyaukmasin Reserve located in Bago Mountain range also known as home of teak in Myanmar. The specific object of the inventory are 
+to explore the species compositon of the Reserve forest;
+to study the natural regeneration fo the reserve forest;
+to formulate the appropriate silvicultural approaches; and 
+to support Myanmar Selection System for logging.
+
+All the trees which are above 5 cm are measured in an area of 180.16 ha.  
+
+```{r}
+
+rm(list = ls())
+
+# install.packages("tidyverse")
+# install.packages("lubridate")
+# install.packages("BIOMASS")
+
+library(tidyverse)
+library(lubridate)
+library(BIOMASS)
+
+```
+```{r}
+setwd("D:/Google Drive (Uni)/PhD_Cambridge/First Year Report/R_First_Year_Calculation/Data")
+Kyaukmasin_MSS <- read.csv("KMS_MSS.csv")
+head(Kyaukmasin_MSS)
+str(Kyaukmasin_MSS)
+class(Kyaukmasin_MSS)
+
+```
+
+```{r}
+Taxo <- correctTaxo(genus=Kyaukmasin_MSS$Genus,species = Kyaukmasin_MSS$Species)
+
+Kyaukmasin_MSS$genusCorr <- Taxo$genusCorrected
+Kyaukmasin_MSS$speciesCorr <- Taxo$speciesCorrected
+
+APG <- getTaxonomy(Kyaukmasin_MSS$genusCorr, findOrder =T)
+Kyaukmasin_MSS$familyAPG <- APG$family
+Kyaukmasin_MSS$orderAPG <- APG$order
+
+dataWD <- getWoodDensity(genus=Kyaukmasin_MSS$genusCorr,
+                       species=Kyaukmasin_MSS$speciesCorr,
+                       stand=Kyaukmasin_MSS$plotId)
+
+sum(dataWD$levelWD == "species")
+
+sum(dataWD$levelWD == "genus")
+
+sum(!dataWD$levelWD%in%c("genus","species"))
+# 
+# WrongNames <- filter(Taxo, nameModified == TRUE)
+
+```
+
+Height Estimation and Biomass Biomass Calculation
+The geo-positions of Kyaukmasin Reserve (UTM) is used to formulate Height Model as I do not have  Height data. 
+
+```{r}
+Kyaukmasin_MSS$WD=dataWD$meanWD
+
+myll<-cbind(rep(95.853417, nrow(Kyaukmasin_MSS)),rep(19.43822,nrow(Kyaukmasin_MSS)))
+
+AGBtree<-computeAGB(D=Kyaukmasin_MSS$Dbh_cm,
+                    WD=Kyaukmasin_MSS$WD, coord = myll)
+
+
+
+
+AGB_total_Kyaukmasin_MSS <- Kyaukmasin_MSS %>%  mutate(AGB_Total = AGBtree)
+
+KMSS <- AGB_total_Kyaukmasin_MSS
+
+```
+
+#Converting to Ha scale biomass
+
+```{r}
+ABG_ha <- sum(AGB_total_Kyaukmasin_MSS$AGB_Total)/180.16
+
+```
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,129 @@
+---
+title: "Kyaw_Sein_Win_Tun_Biomass_for_19PSP"
+---
+
+
+```{r}
+rm(list = ls())
+
+# install.packages("tidyverse")
+# install.packages("lubridate")
+# install.packages("BIOMASS")
+
+library(tidyverse)
+library(lubridate)
+library(BIOMASS)
+
+```
+```{r}
+
+The_PSP <- read_csv("../Data/19PSP.csv")
+head(The_PSP)
+str(The_PSP)
+```
+```{r}
+Taxo <- correctTaxo(genus=The_PSP$Genus, species = The_PSP$Species)
+
+The_PSP$genusCorr <- Taxo$genusCorrected
+The_PSP$speciesCorr <- Taxo$speciesCorrected
+
+APG <- getTaxonomy(The_PSP$genusCorr, findOrder =T)
+The_PSP$familyAPG <- APG$family
+The_PSP$orderAPG <- APG$order
+
+dataWD <- getWoodDensity(genus=The_PSP$genusCorr,
+                       species=The_PSP$speciesCorr,
+                       stand=The_PSP$Subplot_area)
+
+sum(dataWD$levelWD == "species")
+
+sum(dataWD$levelWD == "genus")
+
+sum(!dataWD$levelWD%in%c("genus","species"))
+
+```
+```{r}
+The_PSP <- The_PSP %>% 
+  mutate(subplot_id = paste(Location, Compartment, Plot, sep="_"))
+
+```
+```{r}
+# Diameter distribution in three areas
+The_PSP_area <- The_PSP %>% mutate(area = gsub("_[[:digit:]]*_[[:digit:]]*$", "", subplot_id))
+The_PSP_area %>%
+  na.omit %>%
+ggplot(aes(y = Dbh_cm, x = area)) +
+  geom_point(position = "jitter", color = "green", size = 3)+
+  theme_bw()
+```
+
+```{r}
+# Height distribution in three areas
+The_PSP_area %>%
+  na.omit %>%
+  ggplot(aes(y = H_m, x = area)) +
+  geom_point(position = "jitter", color = "green", size = 3)+
+  theme_bw()
+
+```
+
+```{r}
+# Height and diameter relationship
+The_PSP_area %>%
+  na.omit %>%
+ggplot(aes(y = H_m, x = Dbh_cm)) +
+  geom_point(position = "jitter", color = "green", size = 3)+
+  theme_bw()+ stat_smooth()
+```
+
+```{r}
+# species composition in each area
+species_composition <- The_PSP_area %>% select(Binomial,area)
+
+```
+
+```{r}
+# Estimate Biomass
+The_PSP$WD=dataWD$meanWD
+
+The_PSP_without_small <- The_PSP %>% filter(Subplot_area != 0.015625)
+The_PSP_med <- The_PSP_without_small%>% filter(Subplot_area == 0.0625)
+The_PSP_large <- The_PSP_without_small %>% filter(Subplot_area == 0.25)
+
+AGBPlotList <- by(The_PSP_med, The_PSP_med$subplot_id,
+                  function(x) computeAGB(D=x$Dbh_cm,WD=x$WD,H=x$H_m),
+                  simplify=F)
+
+AGBplot <-sapply(AGBPlotList,sum) 
+
+print(The_PSP)
+
+
+AGBPlotList_med<-by(The_PSP_med, The_PSP_med$subplot_id,
+                    function(x) computeAGB(D=x$Dbh_cm,WD=x$WD,H=x$H_m),
+                    simplify=F)
+AGBplot_med<-sapply(AGBPlotList_med,sum) 
+
+AGBPlotList_large<-by(The_PSP_large, The_PSP_large$subplot_id,
+                      function(x) computeAGB(D=x$Dbh_cm,WD=x$WD,H=x$H_m),
+                      simplify=F)
+AGBplot_large<-sapply(AGBPlotList_large,sum) 
+
+AGBplot_med<-data.frame(plot = names(AGBplot_med), agb = AGBplot_med, row.names = NULL)
+AGBplot_large<-data.frame(plot = names(AGBplot_large), agb = AGBplot_large, row.names = NULL)
+AGBplot<-merge(AGBplot_med, AGBplot_large, by = "plot", all.y = TRUE)
+AGBplot$agb.x[is.na(AGBplot$agb.x)]<-0
+
+# Change ha value
+
+AGBplot_ha <- mutate(AGBplot, agb_X_ha = agb.x*(1/0.0625), agb_y_ha = agb.y*(1/0.25)) %>%
+  mutate(AGB_Total = agb_X_ha + agb_y_ha) %>%
+  mutate(area = gsub("_[[:digit:]]*_[[:digit:]]*$", "", plot))
+
+AGBplot_ha %>% ggplot(aes(x= area, y = AGB_Total, fill = area)) + geom_boxplot()
+
+AGBplot_ha %>% ggplot(aes(x= area, y = log(AGB_Total), fill = area)) + geom_boxplot()
+```
+
+
+

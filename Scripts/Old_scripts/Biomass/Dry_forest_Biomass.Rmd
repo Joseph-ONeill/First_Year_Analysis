@@ -1,0 +1,105 @@
+---
+title: "Dry_Forest_AGB"
+author: "ONeill"
+date: "June 15, 2018"
+output: html_document
+---
+
+```{r}
+
+rm(list = ls())
+
+# install.packages("tidyverse")
+# install.packages("lubridate")
+# install.packages("BIOMASS")
+
+library(tidyverse)
+library(lubridate)
+library(BIOMASS)
+
+```
+```{r}
+setwd("D:/Google Drive (Uni)/PhD_Cambridge/First Year Report/R_First_Year_Calculation/Data")
+
+Dry_forests <- read.csv("../Data/Dry_Forest.csv")
+colnames(Dry_forests)
+
+colnames(Dry_forests)[1]<-"Plot_id"
+colnames(Dry_forests)[3]<-"Genus"
+colnames(Dry_forests)[4]<-"Species"
+colnames(Dry_forests)[5]<-"Family"
+
+head(Dry_forests)
+str(Dry_forests)
+```
+```{r}
+
+Taxo <- correctTaxo(genus=Dry_forests$Genus,species = Dry_forests$Species)
+
+Dry_forests$genusCorr <- Taxo$genusCorrected
+Dry_forests$speciesCorr <- Taxo$speciesCorrected
+
+APG <- getTaxonomy(Dry_forests$genusCorr, findOrder =T)
+Dry_forests$familyAPG <- APG$family
+Dry_forests$orderAPG <- APG$order
+
+dataWD <- getWoodDensity(genus=Dry_forests$genusCorr,
+                       species=Dry_forests$speciesCorr,
+                       stand=Dry_forests$plotId)
+
+sum(dataWD$levelWD == "species")
+
+sum(dataWD$levelWD == "genus")
+
+sum(!dataWD$levelWD%in%c("genus","species"))
+
+Dry_forests$WD <-  dataWD$meanWD 
+print(Dry_forests)
+str(Dry_forests)
+is.na(Dry_forests$H_m)
+```
+# Develop HD model
+```{r}
+HDmodels <- modelHD(D=Dry_forests$Dbh_cm, 
+                   H = Dry_forests$H_m,
+                   drawGraph=TRUE,
+                   useWeight=TRUE)
+
+Best_HDmodel<- modelHD(D=Dry_forests$Dbh_cm,
+                 H=Dry_forests$H_m,
+                 method="log3",
+                 useWeight =TRUE)
+
+
+```
+# Getting missing tree Height
+```{r}
+dataHlocal<-retrieveH(D=Dry_forests$Dbh_cm[is.na(Dry_forests$H_m)],
+                      model = Best_HDmodel)
+Dry_forests$H_m[is.na(Dry_forests$H_m)] <- dataHlocal$H
+
+```
+
+
+# Estimate Biomass
+```{r}
+
+Dry_forests$AGB <-computeAGB(D=Dry_forests$Dbh_cm,
+                    WD=Dry_forests$WD,
+                    H=Dry_forests$H_m)
+DF <- Dry_forests
+
+plot_agb<-Dry_forests %>%
+  group_by(Plot_id) %>%
+  summarise(AGB_total = sum(AGB)) %>%
+  mutate(AGB_ha = AGB_total*(1/0.16))
+
+
+hist(plot_agb$AGB_ha)
+mean(plot_agb$AGB_ha); median(plot_agb$AGB_ha)
+
+
+```
+
+
+

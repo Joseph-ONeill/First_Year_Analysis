@@ -1,0 +1,107 @@
+---
+title: "Dipterocarpus_Forest"
+author: "ONeill"
+date: "June 12, 2018"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r}
+
+rm(list = ls())
+
+# install.packages("tidyverse")
+# install.packages("lubridate")
+# install.packages("BIOMASS")
+
+library(tidyverse)
+library(lubridate)
+library(BIOMASS)
+
+```
+```{r}
+setwd("D:/Google Drive (Uni)/PhD_Cambridge/First Year Report/R_First_Year_Calculation/Data")
+Dipterocarpus_forest <- read.csv("Dipterocarpus_forest.csv")
+colnames(Dipterocarpus_forest)
+
+colnames(Dipterocarpus_forest)[1]<-"Plot_id"
+# colnames(Dipterocarpus_forest)[4]<- "Genus"
+# colnames(Dipterocarpus_forest)[5]<-"Species"
+# colnames(Dipterocarpus_forest)[6]<-"Family"
+
+
+head(Dipterocarpus_forest)
+str(Dipterocarpus_forest)
+```
+```{r}
+
+Taxo <- correctTaxo(genus=Dipterocarpus_forest$Genus,species = Dipterocarpus_forest$Species)
+
+Dipterocarpus_forest$genusCorr <- Taxo$genusCorrected
+Dipterocarpus_forest$speciesCorr <- Taxo$speciesCorrected
+
+APG <- getTaxonomy(Dipterocarpus_forest$genusCorr, findOrder =T)
+Dipterocarpus_forest$familyAPG <- APG$family
+Dipterocarpus_forest$orderAPG <- APG$order
+
+dataWD <- getWoodDensity(genus=Dipterocarpus_forest$genusCorr,
+                       species=Dipterocarpus_forest$speciesCorr,
+                       stand=Dipterocarpus_forest$plotId)
+
+sum(dataWD$levelWD == "species")
+
+sum(dataWD$levelWD == "genus")
+
+sum(!dataWD$levelWD%in%c("genus","species"))
+
+Dipterocarpus_forest$WD <-  dataWD$meanWD 
+print(Dipterocarpus_forest)
+str(Dipterocarpus_forest)
+is.na(Dipterocarpus_forest$H_m)
+```
+# Develop HD model
+```{r}
+HDmodels <- modelHD(D=Dipterocarpus_forest$Dbh_cm, 
+                   H = Dipterocarpus_forest$H_m,
+                   drawGraph=TRUE,
+                   useWeight=TRUE)
+
+Best_HDmodel<- modelHD(D=Dipterocarpus_forest$Dbh_cm,
+                 H=Dipterocarpus_forest$H_m,
+                 method="log3",
+                 useWeight =TRUE)
+
+
+```
+# Getting missing tree Height
+```{r}
+dataHlocal<-retrieveH(D=Dipterocarpus_forest$Dbh_cm[is.na(Dipterocarpus_forest$H_m)],
+                      model = Best_HDmodel)
+Dipterocarpus_forest$H_m[is.na(Dipterocarpus_forest$H_m)] <- dataHlocal$H
+
+```
+
+
+# Estimate Biomass
+```{r}
+
+Dipterocarpus_forest$AGB <- computeAGB(D=Dipterocarpus_forest$Dbh_cm,
+                    WD=Dipterocarpus_forest$WD,
+                    H=Dipterocarpus_forest$H_m)
+DIPF <- Dipterocarpus_forest
+```
+# Ha estimate Biomass
+```{r}
+plot_agb<-DIPF %>%
+  group_by(Plot_id) %>%
+  summarise(AGB_total = sum(AGB)) %>%
+  mutate(AGB_ha = AGB_total*(1/0.16))
+
+
+hist(plot_agb$AGB_ha)
+mean(plot_agb$AGB_ha); median(plot_agb$AGB_ha)
+```
+
+
+
